@@ -3,7 +3,6 @@
 namespace Drupal\priority_queue\queue;
 
 use Drupal\Core\Database\Connection;
-use Drupal\Core\Queue\DatabaseQueue;
 use Drupal\Core\DependencyInjection\DependencySerializationTrait;
 use Drupal\Core\Queue\ReliableQueueInterface;
 use Drupal\Core\Queue\QueueGarbageCollectionInterface;
@@ -32,7 +31,7 @@ class PriorityQueue implements ReliableQueueInterface, QueueGarbageCollectionInt
   /**
    * The database connection.
    *
-   * @var \Drupal\Core\Database\Connection $connection
+   * @var \Drupal\Core\Database\Connection
    */
   protected $connection;
 
@@ -57,11 +56,12 @@ class PriorityQueue implements ReliableQueueInterface, QueueGarbageCollectionInt
    * @param int $priority
    *   The associated priority.
    *
-   * @return int|FALSE
+   * @return int|false
    *   A unique ID if the item was successfully created and was (best effort)
    *   added to the queue, otherwise FALSE. We don't guarantee the item was
    *   committed to disk etc, but as far as we know, the item is now in the
    *   queue.
+   *
    * @throws \Exception
    */
   public function createItem($data, $priority = 0) {
@@ -92,7 +92,7 @@ class PriorityQueue implements ReliableQueueInterface, QueueGarbageCollectionInt
    * @param int $priority
    *   The associated priority.
    *
-   * @return int|FALSE
+   * @return int|false
    *   A unique ID if the item was successfully created and was (best effort)
    *   added to the queue, otherwise FALSE. We don't guarantee the item was
    *   committed to disk etc, but as far as we know, the item is now in the
@@ -237,8 +237,8 @@ class PriorityQueue implements ReliableQueueInterface, QueueGarbageCollectionInt
         ->condition('name', 'drupal_batch:%', 'LIKE')
         ->execute();
 
-      // Reset expired items in the default queue implementation table. If that's
-      // not used, this will simply be a no-op.
+      // Reset expired items in the default queue implementation table. If
+      // that's not used, this will simply be a no-op.
       $this->connection->update(static::TABLE_NAME)
         ->fields([
           'expire' => 0,
@@ -264,9 +264,9 @@ class PriorityQueue implements ReliableQueueInterface, QueueGarbageCollectionInt
         return TRUE;
       }
     }
-      // If another process has already created the queue table, attempting to
-      // recreate it will throw an exception. In this case just catch the
-      // exception and do nothing.
+    // If another process has already created the queue table, attempting to
+    // recreate it will throw an exception. In this case just catch the
+    // exception and do nothing.
     catch (SchemaObjectExistsException $e) {
       return TRUE;
     }
@@ -280,7 +280,7 @@ class PriorityQueue implements ReliableQueueInterface, QueueGarbageCollectionInt
    * yet the query failed, then the queue is stale and the exception needs to
    * propagate.
    *
-   * @param $e
+   * @param \Exception $e
    *   The exception.
    *
    * @throws \Exception
@@ -291,7 +291,6 @@ class PriorityQueue implements ReliableQueueInterface, QueueGarbageCollectionInt
       throw $e;
     }
   }
-
 
   /**
    * Defines the schema for the queue table.

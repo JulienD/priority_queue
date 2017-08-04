@@ -15,6 +15,9 @@ use Drupal\priority_queue\queue\PriorityQueue;
  */
 class PriorityQueueKernelTest extends KernelTestBase {
 
+  /**
+   * {@inheritdoc}
+   */
   public function setUp() {
     parent::setUp();
   }
@@ -35,12 +38,12 @@ class PriorityQueueKernelTest extends KernelTestBase {
   /**
    * Queues and dequeues a set of items to check the basic queue functionality.
    *
-   * @param \Drupal\Core\Queue\QueueInterface $queue1
+   * @param \Drupal\priority_queue\Queue\PriorityQueue $queue1
    *   An instantiated queue object.
-   * @param \Drupal\Core\Queue\QueueInterface $queue2
+   * @param \Drupal\priority_queue\Queue\PriorityQueue $queue2
    *   An instantiated queue object.
    */
-  protected function queueTest($queue1, $queue2) {
+  protected function queueTest(PriorityQueue $queue1, PriorityQueue $queue2) {
 
     // Create three items.
     $data = [
