@@ -1,0 +1,4 @@
+services:
+  queue.priority_queue:
+    class: Drupal\priority_queue\Queue\PriorityQueueFactory
+    arguments: ['@database']
