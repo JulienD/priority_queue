@@ -4,13 +4,18 @@ namespace Drupal\priority_queue\queue;
 
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Queue\DatabaseQueue;
+use Drupal\Core\DependencyInjection\DependencySerializationTrait;
+use Drupal\Core\Queue\ReliableQueueInterface;
+use Drupal\Core\Queue\QueueGarbageCollectionInterface;
 
 /**
  * Default queue implementation.
  *
  * @ingroup queue
  */
-class PriorityQueue extends DatabaseQueue {
+class PriorityQueue implements ReliableQueueInterface, QueueGarbageCollectionInterface {
+
+  use DependencySerializationTrait;
 
   /**
    * The database table name.
@@ -32,7 +37,7 @@ class PriorityQueue extends DatabaseQueue {
   protected $connection;
 
   /**
-   * Constructs a \Drupal\priority_queue\Queue\PriorityQueue object.
+   * Constructs a \Drupal\Core\Queue\DatabaseQueue object.
    *
    * @param string $name
    *   The name of the queue.
@@ -40,7 +45,8 @@ class PriorityQueue extends DatabaseQueue {
    *   The Connection object containing the key-value tables.
    */
   public function __construct($name, Connection $connection) {
-    parent::__construct($name, $connection);
+    $this->name = $name;
+    $this->connection = $connection;
   }
 
   /**
@@ -109,6 +115,21 @@ class PriorityQueue extends DatabaseQueue {
   /**
    * {@inheritdoc}
    */
+  public function numberOfItems() {
+    try {
+      return $this->connection->query('SELECT COUNT(item_id) FROM {' . static::TABLE_NAME . '} WHERE name = :name', [':name' => $this->name])
+        ->fetchField();
+    }
+    catch (\Exception $e) {
+      $this->catchException($e);
+      // If there is no table there cannot be any items.
+      return 0;
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function claimItem($lease_time = 30) {
     // Claim an item by updating its expire fields. If claim is not successful
     // another thread may have claimed the item in the meantime. Therefore loop
@@ -116,7 +137,7 @@ class PriorityQueue extends DatabaseQueue {
     // are no unclaimed items left.
     while (TRUE) {
       try {
-        $item = $this->connection->queryRange('SELECT data, priority, created, item_id FROM {' . static::TABLE_NAME . '} q WHERE expire = 0 AND name = :name ORDER BY priority, created, item_id ASC', 0, 1, [':name' => $this->name])->fetchObject();
+        $item = $this->connection->queryRange('SELECT data, priority, created, item_id FROM {' . static::TABLE_NAME . '} q WHERE expire = 0 AND name = :name ORDER BY priority DESC, created, item_id ASC', 0, 1, [':name' => $this->name])->fetchObject();
       }
       catch (\Exception $e) {
         $this->catchException($e);
@@ -149,6 +170,128 @@ class PriorityQueue extends DatabaseQueue {
       }
     }
   }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function releaseItem($item) {
+    try {
+      $update = $this->connection->update(static::TABLE_NAME)
+        ->fields([
+          'expire' => 0,
+        ])
+        ->condition('item_id', $item->item_id);
+      return $update->execute();
+    }
+    catch (\Exception $e) {
+      $this->catchException($e);
+      // If the table doesn't exist we should consider the item released.
+      return TRUE;
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteItem($item) {
+    try {
+      $this->connection->delete(static::TABLE_NAME)
+        ->condition('item_id', $item->item_id)
+        ->execute();
+    }
+    catch (\Exception $e) {
+      $this->catchException($e);
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function createQueue() {
+    // All tasks are stored in a single database table (which is created on
+    // demand) so there is nothing we need to do to create a new queue.
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteQueue() {
+    try {
+      $this->connection->delete(static::TABLE_NAME)
+        ->condition('name', $this->name)
+        ->execute();
+    }
+    catch (\Exception $e) {
+      $this->catchException($e);
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function garbageCollection() {
+    try {
+      // Clean up the queue for failed batches.
+      $this->connection->delete(static::TABLE_NAME)
+        ->condition('created', REQUEST_TIME - 864000, '<')
+        ->condition('name', 'drupal_batch:%', 'LIKE')
+        ->execute();
+
+      // Reset expired items in the default queue implementation table. If that's
+      // not used, this will simply be a no-op.
+      $this->connection->update(static::TABLE_NAME)
+        ->fields([
+          'expire' => 0,
+        ])
+        ->condition('expire', 0, '<>')
+        ->condition('expire', REQUEST_TIME, '<')
+        ->execute();
+    }
+    catch (\Exception $e) {
+      $this->catchException($e);
+    }
+  }
+
+  /**
+   * Check if the table exists and create it if not.
+   */
+  protected function ensureTableExists() {
+    try {
+      $database_schema = $this->connection->schema();
+      if (!$database_schema->tableExists(static::TABLE_NAME)) {
+        $schema_definition = $this->schemaDefinition();
+        $database_schema->createTable(static::TABLE_NAME, $schema_definition);
+        return TRUE;
+      }
+    }
+      // If another process has already created the queue table, attempting to
+      // recreate it will throw an exception. In this case just catch the
+      // exception and do nothing.
+    catch (SchemaObjectExistsException $e) {
+      return TRUE;
+    }
+    return FALSE;
+  }
+
+  /**
+   * Act on an exception when queue might be stale.
+   *
+   * If the table does not yet exist, that's fine, but if the table exists and
+   * yet the query failed, then the queue is stale and the exception needs to
+   * propagate.
+   *
+   * @param $e
+   *   The exception.
+   *
+   * @throws \Exception
+   *   If the table exists the exception passed in is rethrown.
+   */
+  protected function catchException(\Exception $e) {
+    if ($this->connection->schema()->tableExists(static::TABLE_NAME)) {
+      throw $e;
+    }
+  }
+
 
   /**
    * Defines the schema for the queue table.
