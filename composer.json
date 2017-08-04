@@ -2,6 +2,7 @@
   "name": "drupal/priority_queue",
   "type": "drupal-module",
   "description": "Priority queue implementation for Drupal",
+  "license": "MIT",
   "homepage": "https://www.drupal.org/project/priority_queue",
   "support": {
     "issues": "http://drupal.org/project/issues/priority_queue",
