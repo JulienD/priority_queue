@@ -1,0 +1,5 @@
+name: priority_queue
+type: module
+description: Provides a priority queue implementation.
+core: 8.x
+package: Custom
